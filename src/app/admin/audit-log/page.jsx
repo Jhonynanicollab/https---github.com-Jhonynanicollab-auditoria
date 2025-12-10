@@ -44,16 +44,23 @@ const AuditLogPage = () => {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        // REEMPLAZO: Usar fetch API para llamar al nuevo Route Handler
-        const response = await fetch('/api/audit/logs');
+        // REEMPLAZO: Cambiamos el header 'x-auditor-role' por 'Authorization'
+        const response = await fetch('/api/audit/logs', {
+          // 🔑 AÑADIMOS EL HEADER CORRECTO (Authorization: Bearer...)
+          headers: {
+            'Authorization': 'Bearer ADMIN_TOKEN_SIMULADO' // El valor real no importa, solo el formato
+          }
+        });
         
         if (!response.ok) {
-           throw new Error('Failed to fetch logs from API');
+          // Si llega aquí, es porque la API devolvió un 403/500, incluso con el header
+          throw new Error('Failed to fetch logs from API');
         }
         
         const data = await response.json();
         setLogs(data);
       } catch (err) {
+
         // Mensaje de error ajustado para indicar un problema de servidor/red
         setError("Error al cargar los logs de auditoría. Verifique el Route Handler: /api/audit/logs"); 
         console.error(err);
