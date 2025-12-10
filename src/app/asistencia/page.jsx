@@ -1,4 +1,6 @@
+// src/features/admin/AttendanceScreen.jsx
 "use client";
+
 import React, { useEffect, useState } from "react";
 import {
   Box,
@@ -22,14 +24,12 @@ import {
 } from "@mui/icons-material";
 import StackStudents from "./StackStudents";
 import TableStudentsDesktop from "./TableStudentsDesktop";
-import studentService from "@/firebase/students";
 import { useRouter } from "next/navigation";
-import attendanceService from "@/firebase/attendance";
 import { toast } from "react-toastify";
-// Materias ejemplo
-const optionsFilter = ["Obligatorio", "Todos"];
+import { useAuth } from "@/features/auth/context";
 
-const days = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+// (optionsFilter y days no se usan, los omito)
+
 const AttendanceScreen = () => {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
@@ -37,19 +37,27 @@ const AttendanceScreen = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [indexDay, setIndexDay] = useState(new Date().getDay()); // 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb
-  const validateCompleteAttendance = (students) => {
-    return students.every((s) => s.estado !== "Pendiente");
+
+  // JS getDay(): 0=Dom, 1=Lun, ..., 6=Sáb
+  const [indexDay, setIndexDay] = useState(new Date().getDay());
+
+  // Obtener ID de usuario logueado para auditoría
+  const { user } = useAuth();
+  const adminUserId = user?.id || 1;
+
+  const validateCompleteAttendance = (studentsList) => {
+    return studentsList.every((s) => s.estado !== "Pendiente");
   };
+
   const handleSaveAttendance = async () => {
     if (!validateCompleteAttendance(students)) {
       alert("Por favor, complete la asistencia de todos los estudiantes.");
       return;
     }
-    // Lógica para guardar la
-    setIsLoading(true);
-    const today = new Date();
 
+    setIsLoading(true);
+
+    const today = new Date();
     const peruDate = new Intl.DateTimeFormat("es-PE", {
       timeZone: "America/Lima",
       year: "numeric",
@@ -60,6 +68,7 @@ const AttendanceScreen = () => {
       .split("/")
       .reverse()
       .join("-");
+
     const attendanceData = {
       date: peruDate,
       students: students.map((s) => ({
@@ -69,11 +78,31 @@ const AttendanceScreen = () => {
         code: s.code,
       })),
     };
-    toast.success("Asistencia guardada correctamente");
-    await attendanceService.addAttendance(attendanceData);
-    setTimeout(() => {
+
+    try {
+      const response = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attendance: attendanceData,
+          userId: adminUserId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Fallo al guardar la asistencia.");
+      }
+
+      toast.success("Asistencia guardada correctamente");
+      localStorage.removeItem("students"); // limpiar cache local
+      // Si quieres, aquí podrías volver a cargar estudiantes o redirigir
+    } catch (e) {
+      console.error(e);
+      toast.error(`Error: ${e.message}`);
+    } finally {
       setIsLoading(false);
-    }, 2000); // Simula loading
+    }
   };
 
   const handleEstado = (id, estado) => {
@@ -81,42 +110,60 @@ const AttendanceScreen = () => {
       s.id === id ? { ...s, estado } : s
     );
     setStudents(newStatesStudents);
-    // Actualizar estado en localStorage
     localStorage.setItem("students", JSON.stringify(newStatesStudents));
   };
+
+  // Cargar estudiantes vía API
   useEffect(() => {
     const fetchStudents = async () => {
-      const data = await studentService.getAllStudents();
-      // Filtrar estudiantes que tienen clases el día actual
-      const filtered = data.filter((s) => s.selectedDays.includes(indexDay));
-      filtered.forEach((s) => (s.estado = "Pendiente"));
-      const storedStudents = localStorage.getItem("students");
-      if (storedStudents) {
-        const parsedStudents = JSON.parse(storedStudents);
-        // Actualizar estados desde localStorage
-        filtered.forEach((s) => {
-          const storedStudent = parsedStudents.find((st) => st.id === s.id);
-          if (storedStudent) {
-            s.estado = storedStudent.estado;
-          }
-        });
+      try {
+        const response = await fetch("/api/students");
+        if (!response.ok) {
+          throw new Error("Fallo al obtener la lista de estudiantes.");
+        }
+        const data = await response.json();
+
+        // Filtrar estudiantes que tienen clases el día actual
+        const filtered = data.filter((s) =>
+          s.selectedDays?.includes(indexDay)
+        );
+        filtered.forEach((s) => (s.estado = "Pendiente"));
+
+        const storedStudents = localStorage.getItem("students");
+        if (storedStudents) {
+          const parsedStudents = JSON.parse(storedStudents);
+          // Actualizar estados desde localStorage
+          filtered.forEach((s) => {
+            const storedStudent = parsedStudents.find((st) => st.id === s.id);
+            if (storedStudent) {
+              s.estado = storedStudent.estado;
+            }
+          });
+        }
+
+        setStudents(filtered);
+      } catch (e) {
+        console.error(e);
+        toast.error(`Error cargando estudiantes: ${e.message}`);
       }
-      setStudents(filtered);
     };
+
     fetchStudents();
-  }, []);
+  }, [indexDay]);
 
   // Contadores
   const presentes = students.filter((s) => s.estado === "Presente").length;
   const ausentes = students.filter((s) => s.estado === "Ausente").length;
   const tardanzas = students.filter((s) => s.estado === "Tardanza").length;
   const pendientes = students.filter((s) => s.estado === "Pendiente").length;
+
   // Filtro por búsqueda
   const filteredStudents = students.filter(
     (s) =>
       s.full_name.toLowerCase().includes(search.toLowerCase()) ||
       s.code.includes(search.toLowerCase())
   );
+
   return (
     <Box p={3} sx={{ backgroundColor: "#f7f9fc", minHeight: "100vh" }}>
       {/* Header */}

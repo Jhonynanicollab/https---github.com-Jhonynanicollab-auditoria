@@ -1,4 +1,6 @@
+// src/features/admin/TableStudents.jsx
 "use client";
+
 import PropTypes from "prop-types";
 import React, { useEffect, useState } from "react";
 import {
@@ -22,18 +24,22 @@ import EditSquareIcon from "@mui/icons-material/EditSquare";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import { useTheme } from "@mui/material/styles";
-import studentService from "@/firebase/students";
+
+// Modales y notificaciones
 import ModalAddStudent from "./ModalAddStudent";
-import { faculties } from "@/firebase/seed";
+import ModalDeleteStudent from "@/features/students/ModalDeleteStudent";
 import { toast } from "react-toastify";
+
 // Mapeo de días para mostrar como texto
 const daysMap = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
 // --- Header con buscador, filtros y botón ---
 const TableHeaderStudents = ({
   onSearch,
   onFilterFaculty,
   onAdd,
   filterFaculty,
+  faculties, // ahora viene por props
 }) => {
   return (
     <Stack
@@ -60,7 +66,7 @@ const TableHeaderStudents = ({
         value={filterFaculty}
       >
         <MenuItem value="">Todas</MenuItem>
-        {faculties.map((fac) => (
+        {(faculties || []).map((fac) => (
           <MenuItem key={fac.id} value={fac.name}>
             {fac.name}
           </MenuItem>
@@ -78,43 +84,124 @@ const TableHeaderStudents = ({
   );
 };
 
-const TableStudents = () => {
+// 🔹 Este componente recibe los datos iniciales desde el padre
+// y una función refetchStudents para volver a llamar a la API.
+const TableStudents = ({ initialStudentsData, refetchStudents }) => {
   const [search, setSearch] = useState("");
   const [filterFaculty, setFilterFaculty] = useState("");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const [studentsData, setStudentsData] = useState([]);
+
+  const [studentsData, setStudentsData] = useState(initialStudentsData || []);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+
+  const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState(null);
+
+  // 🆕 estados para catálogos
+  const [facultiesData, setFacultiesData] = useState([]);
+  const [schoolsData, setSchoolsData] = useState([]);
+
+  // Sincronizar el estado interno con los datos del padre (API)
   useEffect(() => {
-    const fetchStudents = async () => {
-      const data = await studentService.getAllStudents();
-      setStudentsData(data);
+    setStudentsData(initialStudentsData || []);
+  }, [initialStudentsData]);
+
+  // 🆕 Cargar catálogos desde la API
+  useEffect(() => {
+    const fetchCatalogs = async () => {
+      try {
+        const [facResponse, schoolResponse] = await Promise.all([
+          fetch("/api/faculties"),
+          fetch("/api/schools"),
+        ]);
+
+        const facs = await facResponse.json();
+        const scs = await schoolResponse.json();
+
+        setFacultiesData(facs);
+        setSchoolsData(scs);
+      } catch (e) {
+        console.error("Error fetching catalogs:", e);
+        // si quieres, aquí podrías usar toast.error(...)
+      }
     };
-    fetchStudents();
+
+    fetchCatalogs();
   }, []);
+
   const handleOpenModalEdit = (student) => {
     setEditingStudent(student);
     setModalOpen(true);
   };
+
+  const handleOpenModalDelete = (student) => {
+    setStudentToDelete(student);
+    setModalDeleteOpen(true);
+  };
+
+  // 🔁 Refactor: usar fetch API para crear/actualizar estudiante
   const handleSubmitStudent = async (student) => {
-    if (editingStudent) {
-      // Actualizar estudiante existente
-      const updatedStudents = studentsData.map((s) =>
-        s.id === student.id ? student : s
-      );
-      setStudentsData(updatedStudents);
-      await studentService.updateStudent(student.id, student);
+    const isEditing = !!editingStudent;
+    const method = isEditing ? "PUT" : "POST";
+    const url = isEditing ? `/api/students/${student.id}` : "/api/students";
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(student),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Error ${isEditing ? "actualizando" : "agregando"} estudiante.`
+        );
+      }
+
+      // Volver a pedir los datos al servidor
+      await refetchStudents();
+
       setEditingStudent(null);
-      toast.success("Estudiante actualizado correctamente");
-    } else {
-      // Agregar nuevo estudiante
-      const { newStudent } = await studentService.addStudent(student);
-      console.log(" newStudent", newStudent);
-      setStudentsData([...studentsData, newStudent]);
-      toast.success("Estudiante agregado correctamente");
+      setModalOpen(false);
+      toast.success(
+        `Estudiante ${isEditing ? "actualizado" : "agregado"} correctamente`
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message || "Error de servidor al guardar.");
     }
   };
+
+  // 🗑️ Refactor: usar fetch API para eliminar estudiante
+  const handleDeleteStudent = async () => {
+    if (!studentToDelete) return;
+
+    try {
+      const response = await fetch(`/api/students/${studentToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Error al eliminar estudiante.");
+      }
+
+      // Volver a pedir los datos al servidor
+      await refetchStudents();
+
+      toast.success("Estudiante eliminado correctamente");
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message || "Error al eliminar estudiante.");
+    }
+
+    setModalDeleteOpen(false);
+    setStudentToDelete(null);
+  };
+
   // Filtrado dinámico
   const filteredStudents = studentsData.filter(
     (s) =>
@@ -128,8 +215,12 @@ const TableStudents = () => {
       <TableHeaderStudents
         onSearch={setSearch}
         onFilterFaculty={setFilterFaculty}
-        onAdd={() => setModalOpen(true)}
+        onAdd={() => {
+          setModalOpen(true);
+          setEditingStudent(null);
+        }}
         filterFaculty={filterFaculty}
+        faculties={facultiesData} // 🔹 ahora el header recibe el catálogo
       />
 
       {/* Vista tipo tabla (desktop) */}
@@ -173,7 +264,9 @@ const TableStudents = () => {
                   <TableCell>{student.faculty}</TableCell>
                   <TableCell>{student.school}</TableCell>
                   <TableCell>
-                    {student.selectedDays.map((d) => daysMap[d]).join(", ")}
+                    {student.selectedDays
+                      .map((d) => daysMap[d])
+                      .join(", ")}
                   </TableCell>
                   <TableCell align="center">
                     <Stack direction="row" spacing={1} justifyContent="center">
@@ -185,7 +278,13 @@ const TableStudents = () => {
                       >
                         <EditSquareIcon sx={{ fontSize: 18, mr: 0.5 }} />
                       </Button>
-                      <Button variant="outlined" size="small" color="error">
+
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        onClick={() => handleOpenModalDelete(student)}
+                      >
                         <DeleteIcon sx={{ fontSize: 18, mr: 0.5 }} />
                       </Button>
                     </Stack>
@@ -209,7 +308,8 @@ const TableStudents = () => {
                 </Typography>
                 <Typography variant="body2">📞 {student.number}</Typography>
                 <Typography variant="body2">
-                  Días: {student.selectedDays.map((d) => daysMap[d]).join(", ")}
+                  Días:{" "}
+                  {student.selectedDays.map((d) => daysMap[d]).join(", ")}
                 </Typography>
                 <Stack direction="row" spacing={1} mt={1}>
                   <Button
@@ -220,7 +320,12 @@ const TableStudents = () => {
                   >
                     <EditSquareIcon sx={{ fontSize: 18, mr: 0.5 }} />
                   </Button>
-                  <Button variant="outlined" size="small" color="error">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="error"
+                    onClick={() => handleOpenModalDelete(student)}
+                  >
                     <DeleteIcon sx={{ fontSize: 18, mr: 0.5 }} />
                   </Button>
                 </Stack>
@@ -230,26 +335,33 @@ const TableStudents = () => {
         </Stack>
       )}
 
+      {/* 🔹 Pasamos catálogos al modal */}
       <ModalAddStudent
         open={modalOpen}
-        handleClose={() => setModalOpen(false)}
+        handleClose={() => {
+          setModalOpen(false);
+          setEditingStudent(null);
+        }}
         handleSave={handleSubmitStudent}
         initialData={editingStudent}
+        faculties={facultiesData}
+        schools={schoolsData}
+      />
+
+      <ModalDeleteStudent
+        open={modalDeleteOpen}
+        handleClose={() => setModalDeleteOpen(false)}
+        handleDelete={handleDeleteStudent}
+        studentName={studentToDelete?.full_name}
       />
     </div>
   );
 };
 
-// prop types could be added here for better type checking
+// ✅ PropTypes actualizados a las nuevas props reales
 TableStudents.propTypes = {
-  students: PropTypes.array.isRequired,
-  filteredStudents: PropTypes.array.isRequired,
-  handleOpenModalEdit: PropTypes.func.isRequired,
-  handleSubmitStudent: PropTypes.func.isRequired,
-  modalOpen: PropTypes.bool.isRequired,
-  setModalOpen: PropTypes.func.isRequired,
-  search: PropTypes.string.isRequired,
-  editingStudent: PropTypes.object,
+  initialStudentsData: PropTypes.array.isRequired,
+  refetchStudents: PropTypes.func.isRequired,
 };
 
 TableHeaderStudents.propTypes = {
@@ -257,6 +369,7 @@ TableHeaderStudents.propTypes = {
   onFilterFaculty: PropTypes.func.isRequired,
   onAdd: PropTypes.func.isRequired,
   filterFaculty: PropTypes.string.isRequired,
+  faculties: PropTypes.array.isRequired,
 };
 
 export default TableStudents;

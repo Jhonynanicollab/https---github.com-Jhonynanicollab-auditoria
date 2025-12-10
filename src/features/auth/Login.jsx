@@ -1,4 +1,6 @@
+// src/features/auth/Login.jsx
 "use client";
+
 import React, { useState } from "react";
 import {
   Paper,
@@ -11,6 +13,8 @@ import {
   Divider,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
+// Se elimina la importación directa a la capa DB para evitar errores en el browser
+
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,34 +22,44 @@ const Login = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const router = useRouter();
-  // Función simulada de login
-  const handleLogin = (e) => {
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess(false);
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // 1. LLAMAR A LA NUEVA API ROUTE (Lógica de Cliente/Browser)
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-      // Verificar credenciales de admin
-      if (email === "admin@correo.com" && password === "123456") {
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         setSuccess(true);
-        router.push("/admin");
-      }
-      // Verificar credenciales de estudiante (cualquier email que contenga "estudiante" o "student")
-      else if (
-        (email.toLowerCase().includes("estudiante") ||
-          email.toLowerCase().includes("student") ||
-          email.match(/^stu\d+@/i)) && // Formato STU12345@correo.com
-        password === "123456"
-      ) {
-        setSuccess(true);
-        router.push("/asistencia/scan");
+        const { role } = data.user;
+
+        // 2. Redirección basada en el rol devuelto por la API
+        if (role === "admin") {
+          router.push("/admin");
+        } else if (role === "student") {
+          router.push("/asistencia/scan");
+        } else {
+          setError("Rol de usuario desconocido.");
+        }
       } else {
-        setError("Credenciales inválidas. Intenta de nuevo.");
+        setError(data.error || "Credenciales inválidas. Intenta de nuevo.");
       }
-    }, 1500); // Simula un delay de servidor
+    } catch (e) {
+      console.error("Error durante el login:", e.message);
+      setError("Credenciales inválidas. Intenta de nuevo.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,10 +69,15 @@ const Login = () => {
         padding: "32px",
         margin: "40px auto",
         borderRadius: "16px",
-        backdropFilter: "blur(5px)",
+        // 🔁 backdropFilter se quita de aquí para evitar conflictos SSR/hidratación
+        // backdropFilter: "blur(5px)",
         backgroundColor: "rgba(255, 255, 255, 0.95)",
       }}
-      sx={{ width: { xs: "90%", sm: "400px" } }}
+      // y se mueve a sx para que MUI lo maneje correctamente
+      sx={{
+        width: { xs: "90%", sm: "400px" },
+        backdropFilter: "blur(5px)",
+      }}
     >
       <Typography
         variant="h5"
@@ -109,7 +128,7 @@ const Login = () => {
           disabled={loading}
         >
           {loading ? (
-            <CircularProgress size={24} color="info" />
+            <CircularProgress size={24} color="inherit" />
           ) : (
             "Iniciar Sesión"
           )}
@@ -125,13 +144,14 @@ const Login = () => {
           display="block"
           gutterBottom
         >
-          <strong>Credenciales de prueba:</strong>
+          <strong>Credenciales de prueba (DB):</strong>
         </Typography>
         <Typography variant="caption" display="block" color="text.secondary">
           👨‍💼 Admin: admin@correo.com / 123456
         </Typography>
         <Typography variant="caption" display="block" color="text.secondary">
-          👨‍🎓 Estudiante: estudiante@correo.com / 123456
+          (Asegúrate de que estas credenciales existan en la tabla `users` con
+          el rol correcto y la contraseña hasheada).
         </Typography>
       </Box>
     </Paper>

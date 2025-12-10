@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from "react";
 import QRScanner from "../../../features/attendance/QRScanner";
-import attendanceService from "../../../firebase/attendance";
 import {
   Box,
   Card,
@@ -15,43 +14,80 @@ import {
   Chip,
   Stack,
   Divider,
+  CircularProgress,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import PersonIcon from "@mui/icons-material/Person";
+import { toast } from "react-toastify";
 
 export default function ScanPage() {
   const [result, setResult] = useState(null);
+  const [studentDetails, setStudentDetails] = useState(null);
   const [message, setMessage] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [resetKey, setResetKey] = useState(0);
 
   async function handleResult(data) {
     setResult(data);
     setMessage(null);
+    setLoading(true);
+
+    try {
+      const response = await fetch(`/api/students/code/${data}`);
+      const resultData = await response.json();
+
+      if (!response.ok || !resultData.student) {
+        throw new Error(resultData.error || 'Estudiante no encontrado en la DB.');
+      }
+
+      setStudentDetails(resultData.student);
+      setMessage(`Estudiante encontrado: ${resultData.student.full_name}`);
+    } catch (e) {
+      setResult(null);
+      setStudentDetails(null);
+      setMessage(`Error: ${e.message}`);
+      toast.error(`QR No Válido: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function confirmAttendance() {
-    if (!result) return;
-    // assumimos que el QR contiene el código del estudiante
-    const student = {
-      id: result,
-      full_name: result,
-      code: result,
-      estado: "Presente",
-    };
+    if (!result || !studentDetails) return;
+    setLoading(true);
+
     try {
-      const res = await attendanceService.addAttendance({
-        students: [student],
+      const response = await fetch('/api/attendance/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: studentDetails.id,
+          studentData: studentDetails,
+        }),
       });
-      setMessage(res?.message ?? "Asistencia intentada");
+
+      const res = await response.json();
+
+      if (!response.ok || !res.success) {
+        throw new Error(res.message || 'Error registrando asistencia.');
+      }
+
+      setMessage(res.message);
       setSuccess(true);
+      toast.success(res.message);
     } catch (e) {
       console.error(e);
-      setMessage("Error registrando asistencia");
+      setMessage(e.message);
+      toast.error(e.message);
+    } finally {
+      setLoading(false);
     }
   }
+
+  const displayStudentName = studentDetails?.full_name || result;
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -81,7 +117,13 @@ export default function ScanPage() {
           <Card elevation={3}>
             <CardContent sx={{ p: 3 }}>
               {!success ? (
-                <QRScanner onResult={handleResult} resetKey={resetKey} />
+                loading ? (
+                  <Box sx={{ height: 480, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CircularProgress size={60} />
+                  </Box>
+                ) : (
+                  <QRScanner onResult={handleResult} resetKey={resetKey} />
+                )
               ) : (
                 <Paper
                   elevation={0}
@@ -110,11 +152,11 @@ export default function ScanPage() {
                     color="text.secondary"
                     gutterBottom
                   >
-                    Se registró correctamente la asistencia
+                    Se registró correctamente la asistencia para:
                   </Typography>
                   <Chip
                     icon={<PersonIcon />}
-                    label={`Código: ${result}`}
+                    label={displayStudentName}
                     color="success"
                     sx={{ mt: 2, fontSize: 16, py: 2.5, px: 1 }}
                   />
@@ -143,7 +185,7 @@ export default function ScanPage() {
 
               <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Código Detectado:
+                  Estudiante/Código Detectado:
                 </Typography>
                 <Paper
                   elevation={0}
@@ -155,7 +197,7 @@ export default function ScanPage() {
                   }}
                 >
                   <Typography variant="h6" fontWeight="bold">
-                    {result ?? "—"}
+                    {displayStudentName ?? "—"}
                   </Typography>
                 </Paper>
               </Box>
@@ -167,8 +209,8 @@ export default function ScanPage() {
                   size="large"
                   fullWidth
                   onClick={confirmAttendance}
-                  disabled={!result || success}
-                  startIcon={<CheckCircleIcon />}
+                  disabled={!studentDetails || success || loading}
+                  startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />}
                 >
                   Confirmar Asistencia
                 </Button>
@@ -180,10 +222,12 @@ export default function ScanPage() {
                   fullWidth
                   onClick={() => {
                     setResult(null);
+                    setStudentDetails(null);
                     setMessage(null);
                     setSuccess(false);
                     setResetKey((k) => k + 1);
                   }}
+                  disabled={loading}
                   startIcon={<RestartAltIcon />}
                 >
                   Volver a Escanear

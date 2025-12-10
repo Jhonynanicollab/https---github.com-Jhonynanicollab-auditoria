@@ -7,6 +7,7 @@ import {
   Typography,
   Paper,
   Divider,
+  CircularProgress,
 } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import PeopleIcon from "@mui/icons-material/People";
@@ -14,13 +15,13 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import EditDocumentIcon from "@mui/icons-material/EditDocument";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import SecurityIcon from "@mui/icons-material/Security";
 import TableStudents from "@/features/admin/TableStudents";
 import { useRouter } from "next/navigation";
-import studentService from "../../firebase/students";
-const Page = () => {
-  const router = useRouter();
-  const [students, setStudents] = useState([]);
-  const dataStudents = {
+import { useAuth } from "@/features/auth/context";
+
+const calculateDashboardData = (students) => {
+  return {
     totalStudents: students.length,
     activeStudents: students.filter((student) => student.active).length,
     promedioAsistencia: students.length
@@ -29,14 +30,48 @@ const Page = () => {
       : 0,
     inasistencias: students.filter((student) => !student.asistencia).length,
   };
+};
+
+const Page = () => {
+  const router = useRouter();
+  // Obtener la función para gestionar la sesión
+  const { setUser } = useAuth();
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchStudents = async () => {
+    try {
+      const response = await fetch('/api/students');
+      if (!response.ok) {
+        throw new Error('Failed to fetch students from API');
+      }
+      const data = await response.json();
+      setStudents(data);
+    } catch (e) {
+      console.error("Error fetching students:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchStudents = async () => {
-      const students = await studentService.getAllStudents();
-      setStudents(students);
-      console.log(students);
-    };
     fetchStudents();
   }, []);
+
+  const dataStudents = calculateDashboardData(students);
+
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
   return (
     <Box sx={{ bgcolor: "#f4f7fe", minHeight: "100vh" }}>
       {/* Header */}
@@ -59,7 +94,17 @@ const Page = () => {
             Panel de Administración
           </Typography>
         </Box>
-        <Button variant="contained" color="primary" size="small">
+        <Button
+          variant="contained"
+          color="primary"
+          size="small"
+          onClick={() => {
+            // 1. Limpiar estado de usuario en el contexto (logout)
+            if (setUser) setUser(null);
+            // 2. Redirigir a la página de inicio
+            router.push("/");
+          }}
+        >
           Salir
         </Button>
       </Paper>
@@ -72,7 +117,7 @@ const Page = () => {
         justifyContent="center"
         alignItems="stretch"
       >
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={4}>
           <Card
             sx={{
               height: "100%",
@@ -104,7 +149,7 @@ const Page = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={4}>
           <Card
             sx={{
               height: "100%",
@@ -131,6 +176,38 @@ const Page = () => {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Ver registros detallados de asistencias pasadas.
+              </Typography>
+            </Box>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Card
+            sx={{
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              p: 3,
+              borderRadius: 2,
+              cursor: "pointer",
+              border: "1px solid #eee",
+              transition: "all 0.3s ease-in-out",
+              "&:hover": {
+                borderColor: "#d32f2f",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              },
+              width: "100%",
+            }}
+            onClick={() => router.push("/admin/audit-log")}
+          >
+            <SecurityIcon sx={{ fontSize: 50, color: "#d32f2f" }} />
+            <Box>
+              <Typography variant="subtitle1" fontWeight="bold">
+                Logs de Auditoría DB
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Revisar registros inmutables de cambios críticos de datos.
               </Typography>
             </Box>
           </Card>
@@ -211,7 +288,7 @@ const Page = () => {
       </Grid>
 
       <Box sx={{ px: { xs: 2, md: 6 }, py: 3 }}>
-        <TableStudents />
+        <TableStudents initialStudentsData={students} refetchStudents={fetchStudents} />
       </Box>
     </Box>
   );

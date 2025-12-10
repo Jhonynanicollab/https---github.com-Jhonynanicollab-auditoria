@@ -1,4 +1,6 @@
+// src/features/students/ModalAddStudent.jsx
 "use client";
+
 import PropTypes from "prop-types";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,8 +17,7 @@ import {
   useTheme,
   useMediaQuery,
 } from "@mui/material";
-import { faculties, schools } from "@/firebase/seed";
-import studentService from "@/firebase/students";
+
 const style = {
   position: "absolute",
   top: "50%",
@@ -34,6 +35,7 @@ const style = {
 const diasSemana = ["Lun", "Mar", "Mié", "Jue", "Vie"];
 
 const emptyForm = {
+  id: undefined,        // por si viene id al editar
   code: "",
   full_name: "",
   email: "",
@@ -48,8 +50,10 @@ const emptyForm = {
 const ModalAddStudent = ({
   open,
   handleClose,
-  handleSave,
+  handleSave,   // función que usa fetch en el componente padre
   initialData = null,
+  faculties,    // viene del padre (catálogo)
+  schools,      // viene del padre (catálogo)
 }) => {
   const [formData, setFormData] = useState(
     initialData ? { ...emptyForm, ...initialData } : { ...emptyForm }
@@ -93,6 +97,7 @@ const ModalAddStudent = ({
   };
 
   const toggleDay = (idx) => {
+    // usamos idx+1 para que los días sean [1..5]
     setFormData((prev) => {
       const exists = prev.selectedDays.includes(idx);
       return {
@@ -106,21 +111,36 @@ const ModalAddStudent = ({
 
   const onSubmit = async () => {
     setIsLoading(true);
+
     // validación mínima: code y full_name
     if (!formData.code?.trim() || !formData.full_name?.trim()) {
-      // puedes reemplazar por Snackbar / helperText
       alert("Código y Nombre son obligatorios.");
       setIsLoading(false);
       return;
     }
-    setTimeout(() => {}, 3000); // por si acaso
 
-    await handleSave({ ...formData });
-    handleClose();
-    setFormData({ ...emptyForm });
-    setIsLoading(false);
+    try {
+      // Aquí simplemente llamamos a handleSave, que ahora es API-based
+      await handleSave({ ...formData });
+
+      const currentStudentId = formData.id;
+
+      // Si es nuevo (sin id), limpiamos el formulario
+      if (!currentStudentId) {
+        setFormData({ ...emptyForm });
+      }
+
+      handleClose();
+    } catch (err) {
+      console.error(err);
+      // El toast / manejo de error se hace usualmente en el padre
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   console.log(formData);
+
   return (
     <Modal open={open} onClose={handleClose} sx={{ color: "black" }}>
       <Box
@@ -232,7 +252,7 @@ const ModalAddStudent = ({
                     onChange={() => toggleDay(idx + 1)}
                   />
                 }
-                label={`${dia}`}
+                label={dia}
               />
             ))}
           </FormGroup>
@@ -251,11 +271,9 @@ const ModalAddStudent = ({
           >
             Cancelar
           </Button>
-          <Button variant="contained" onClick={onSubmit}>
+          <Button variant="contained" onClick={onSubmit} disabled={isLoading}>
             {isLoading ? (
-              <span>
-                <CircularProgress size={24} color="white" />
-              </span>
+              <CircularProgress size={24} />
             ) : (
               "Guardar"
             )}
@@ -271,6 +289,8 @@ ModalAddStudent.propTypes = {
   handleClose: PropTypes.func.isRequired,
   handleSave: PropTypes.func.isRequired,
   initialData: PropTypes.object,
+  faculties: PropTypes.array.isRequired, // catálogo desde el padre
+  schools: PropTypes.array.isRequired,   // catálogo desde el padre
 };
 
 export default ModalAddStudent;

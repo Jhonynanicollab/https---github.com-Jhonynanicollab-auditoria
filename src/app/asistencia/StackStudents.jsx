@@ -8,6 +8,7 @@ import {
   Typography,
 } from "@mui/material";
 import React, { useState } from "react";
+import PropTypes from "prop-types";
 
 const StackStudents = ({ filteredStudents, handleEstado }) => {
   return (
@@ -90,6 +91,18 @@ const StackStudents = ({ filteredStudents, handleEstado }) => {
       ))}
     </Stack>
   );
+};
+
+StackStudents.propTypes = {
+  filteredStudents: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      full_name: PropTypes.string,
+      code: PropTypes.string,
+      estado: PropTypes.string,
+    })
+  ),
+  handleEstado: PropTypes.func.isRequired,
 };
 
 export default StackStudents;
