@@ -27,7 +27,8 @@ async function verifyAdminRole(request) {
 
 // DELETE /api/students/[id]
 export async function DELETE(request, context) {
-  const id = context.params.id;
+  // ⬅️ CORRECCIÓN: params es una promesa → hay que hacer await
+  const { id } = await context.params;
 
   // 1. Verificar rol antes de tocar la BD
   const { role, userId } = await verifyAdminRole(request);
@@ -62,7 +63,8 @@ export async function DELETE(request, context) {
 
 // PUT /api/students/[id] (Actualizar estudiante)
 export async function PUT(request, context) {
-  const id = context.params.id;
+  // ⬅️ CORRECCIÓN IGUAL AQUÍ
+  const { id } = await context.params;
 
   // 1. Verificar rol antes de actualizar
   const { role, userId } = await verifyAdminRole(request);

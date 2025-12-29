@@ -1,6 +1,6 @@
 // seedFirestore.js
-import { setDoc, doc } from "firebase/firestore";
-import { db } from "../firebase/config.js";
+//import { setDoc, doc } from "firebase/firestore";
+//import { db } from "../firebase/config.js";
 
 export const faculties = [
   { id: "fac-ciencias-agrarias", name: "FACULTAD DE CIENCIAS AGRARIAS" },
