@@ -55,17 +55,45 @@ const ModalAddStudent = ({
   faculties,    // viene del padre (catálogo)
   schools,      // viene del padre (catálogo)
 }) => {
-  const [formData, setFormData] = useState(
-    initialData ? { ...emptyForm, ...initialData } : { ...emptyForm }
-  );
+  const [formData, setFormData] = useState(() => {
+    // Normalizar initialData asegurando que todos los valores sean strings o arrays, nunca null/undefined
+    if (initialData) {
+      return {
+        id: initialData.id || undefined,
+        code: initialData.code || "",
+        full_name: initialData.full_name || "",
+        email: initialData.email || "",
+        number: initialData.number || "",
+        facultyId: initialData.facultyId || initialData.faculty || "",
+        faculty: initialData.faculty || "",
+        schoolId: initialData.schoolId || initialData.school || "",
+        school: initialData.school || "",
+        selectedDays: initialData.selectedDays || [],
+      };
+    }
+    return { ...emptyForm };
+  });
   const [isLoading, setIsLoading] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   useEffect(() => {
-    setFormData(
-      initialData ? { ...emptyForm, ...initialData } : { ...emptyForm }
-    );
+    if (initialData) {
+      setFormData({
+        id: initialData.id || undefined,
+        code: initialData.code || "",
+        full_name: initialData.full_name || "",
+        email: initialData.email || "",
+        number: initialData.number || "",
+        facultyId: initialData.facultyId || initialData.faculty || "",
+        faculty: initialData.faculty || "",
+        schoolId: initialData.schoolId || initialData.school || "",
+        school: initialData.school || "",
+        selectedDays: initialData.selectedDays || [],
+      });
+    } else {
+      setFormData({ ...emptyForm });
+    }
   }, [initialData, open]);
 
   const handleChange = (e) => {

@@ -80,7 +80,7 @@ class StudentService {
   // ============================
   // ACTUALIZAR ESTUDIANTE
   // ============================
-  async updateStudent(id, student) {
+  async updateStudent(id, student, userId) {
     const db = await getDbInstance();
     try {
       const { code, full_name, email, number, faculty, school, selectedDays } = student;
@@ -115,27 +115,37 @@ class StudentService {
       console.log("Student updated with ID:", id);
 
       try {
-        await this.#logAudit(id, 'UPDATE', `Student updated: ${id}`, undefined);
+        await this.#logAudit(id, 'UPDATE', `Student updated: ${id}`, userId);
       } catch (logErr) {
         console.error("Audit log error (update):", logErr);
       }
 
+      return { 
+        success: true, 
+        message: "Estudiante actualizado correctamente",
+        updatedStudent: { id, ...student }
+      };
     } catch (e) {
       console.error("Error actualizando estudiante: ", e);
+      return {
+        success: false,
+        message: "Error al actualizar estudiante",
+        error: e.message
+      };
     }
   }
 
   // ============================
   // ELIMINAR ESTUDIANTE
   // ============================
-  async deleteStudent(id) {
+  async deleteStudent(id, userId) {
     const db = await getDbInstance();
     try {
       await db.run('DELETE FROM students WHERE id = ?', [id]);
       console.log("Student deleted with ID:", id);
 
       try {
-        await this.#logAudit(id, 'DELETE', `Student deleted: ${id}`, undefined);
+        await this.#logAudit(id, 'DELETE', `Student deleted: ${id}`, userId);
       } catch (logErr) {
         console.error("Audit log error (delete):", logErr);
       }

@@ -80,12 +80,19 @@ export async function PUT(request, context) {
   try {
     const studentData = await request.json();
 
-    await studentService.updateStudent(id, studentData, userId);
+    const result = await studentService.updateStudent(id, studentData, userId);
 
-    return NextResponse.json(
-      { success: true, updatedStudent: { id, ...studentData } },
-      { status: 200 }
-    );
+    if (result.success) {
+      return NextResponse.json(
+        { success: true, updatedStudent: result.updatedStudent },
+        { status: 200 }
+      );
+    } else {
+      return NextResponse.json(
+        { error: result.message || "Failed to update student." },
+        { status: 400 }
+      );
+    }
   } catch (error) {
     console.error("API Students PUT Error:", error);
     return NextResponse.json(

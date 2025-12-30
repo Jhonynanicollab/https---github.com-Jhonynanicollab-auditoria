@@ -150,7 +150,10 @@ const TableStudents = ({ initialStudentsData, refetchStudents }) => {
     try {
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ADMIN_TOKEN_SIMULADO"
+        },
         body: JSON.stringify(student),
       });
 
@@ -181,6 +184,9 @@ const TableStudents = ({ initialStudentsData, refetchStudents }) => {
     try {
       const response = await fetch(`/api/students/${studentToDelete.id}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": "Bearer ADMIN_TOKEN_SIMULADO"
+        }
       });
 
       const result = await response.json();
